@@ -1,219 +1,533 @@
-# AI Solutions with azure data management services
-focus on how AI application store data, store embeddings, retrieve semantic information and cache results
+# AI solutions with Azure data management services
 
-| Service                           | Main purpose                             | Vector capability       |
-| --------------------------------- | ---------------------------------------- | ----------------------- |
-| **Azure Cosmos DB for NoSQL**     | Globally distributed NoSQL/JSON database | Vector search + DiskANN |
-| **Azure Database for PostgreSQL** | Relational SQL database                  | pgvector + HNSW         |
-| **Azure Managed Redis**           | Very fast in-memory data store/cache     | RediSearch + FLAT/HNSW  |
+How an AI app stores data, stores embeddings, retrieves meaning, and caches results.
 
-## Embedding and Vector Search
+| Service | Main purpose | Vector capability |
+| --- | --- | --- |
+| Azure Cosmos DB for NoSQL | Globally distributed NoSQL / JSON database | Vector search + DiskANN |
+| Azure Database for PostgreSQL | Relational SQL database | pgvector + HNSW |
+| Azure Managed Redis | Fast in-memory store / cache | RediSearch + FLAT / HNSW |
 
-### 1.1 what is embadding?
-its convert something such as text into list of numbers called a vector, actual vector produced can contain hundreds or thousands of dimensions.
+Do not mix the indexes:
 
-example -> "I love cats" -> vector [0.12, -0.44, 0.81, 0.32, ...]
-(the important in not individual numbers, its their position relative to other vectors)
+- Cosmos → **DiskANN**
+- Postgres → **HNSW**
+- Redis → **FLAT / HNSW**
 
-Simple idea
+---
 
-Imagine:
+## 1. Embeddings and vector search
 
-"I like dogs"       → Vector A
-"I love puppies"    → Vector B
-"How to repair SQL" → Vector C
+### 1.1 What is an embedding?
 
-Vectors A and B should be relatively close together because their meanings are similar.Vector C should be farther away.
+An embedding converts something (usually text) into a list of numbers: a **vector**. The vector can have hundreds or thousands of dimensions.
 
-Therefore:
-Embedding = numerical representation of meaning.
-This is what allows an application to search based on meaning, rather than just exact keywords.
+```text
+"I love cats" → [0.12, -0.44, 0.81, 0.32, ...]
+```
+
+The individual numbers are not the point. Position relative to other vectors is the point.
+
+| Text | Vector |
+| --- | --- |
+| "I like dogs" | A |
+| "I love puppies" | B |
+| "How to repair SQL" | C |
+
+A and B sit close together because the meaning is similar. C sits farther away.
+
+**Embedding = numerical representation of meaning.** That is why an app can search by meaning instead of exact keywords.
 
 ### 1.2 Keyword search vs semantic search
 
-Suppose a user searches:
-"How can I reduce my Azure bill?"
+User searches: *"How can I reduce my Azure bill?"*
 
-Your database contains:
-"Methods for lowering cloud computing costs."
+The database has: *"Methods for lowering cloud computing costs."*
 
-A traditional exact keyword search may struggle because the wording is different.
-A vector search can recognize that:
+Keyword search can miss this because the words differ. Vector search can match them because:
 
-reduce bill ≈ lowering costs
-because their embeddings are similar.
+- reduce bill ≈ lowering costs
+- their embeddings are close
 
-Remember
+| Search type | What it matches |
+| --- | --- |
+| Traditional | Words → words |
+| Vector | Meaning → meaning |
 
-Traditional search
-Words → match words
+### 1.3 Vector similarity
 
-Vector search
-Meaning → match meaning
+Once data is a vector, you need a way to say how close two vectors are.
 
-### 1.3 Vector Similarity
-once the data represents as vector, it need to determine how close two vectors are
+| Metric | Meaning |
+| --- | --- |
+| Cosine | Direction / angle |
+| Euclidean / L2 | Straight-line distance |
+| Inner product | Vector alignment |
 
-common measuremnets:
-| Metric             | Meaning                   |
-| ------------------ | ------------------------- |
-| **Cosine**         | Compares direction/angle  |
-| **Euclidean / L2** | Straight-line distance    |
-| **Inner product**  | Measures vector alignment |
+Smaller distance usually means more similar (except when a product score is used as similarity instead of distance).
 
-### 1.4 Basic Vector Search process
-memorizing with 4 steps:
-document -> embedding model -> vector -> store vector + original data
+### 1.4 Vector search in four steps
 
-when user search:
-user question -> embedding model -> query vector -> vector DB -> similarity search -> most similar documents
+Store path:
 
-*important details* - both store documents and user query must be convert into vector using embedding process
+```text
+document → embedding model → vector → store vector + original data
+```
 
-## Retrieval - Augmented generations (RAG)
+Query path:
+
+```text
+user question → embedding model → query vector → vector DB → similarity search → most similar documents
+```
+
+Both the stored documents **and** the user query must go through the same embedding process. Different models = different vector spaces = useless comparison.
+
+---
+
+## 2. Retrieval-augmented generation (RAG)
 
 ### 2.1 What is RAG?
-instead of asking LLM to answer entirely from what its learn, LLM first retrieves information from own data. Information supplied to the LLM known as *context*
 
-Retrieve first -> Generate second
+Do not ask the LLM to answer only from training data. Retrieve your own data first, then generate. That retrieved text is **context**.
 
-### Why use RAG?
-LLM may not know latest or updated details sometimes
+**Retrieve first → generate second.**
 
-we take example for internal employee handbook in a company, instead of retraining the model, the company can:
+### 2.2 Why RAG?
 
-company documents -> split into chunks -> generate embeddings -> store vectors
+The model may not know your latest internal facts. Retraining is expensive. RAG lets you keep company data in a store and pull it at ask-time.
 
-when employee asks "how many annual leave days do I have?"
+Example: employee handbook.
 
-the system performs:
-question -> create embedding -> vector search -> retrieve relevant handbook chunks -> add chunks to LLM prompt -> LLM generate answer
+```text
+company documents → split into chunks → generate embeddings → store vectors
+```
 
-### The 4 exam steps of RAG
+Employee asks: *"How many annual leave days do I have?"*
 
-step 1 - embedded the questions
-"what is our refund policy?" -> embedding model -> [0.18, 0.75, ...]
+```text
+question → embedding → vector search → relevant chunks → add chunks to prompt → LLM answers
+```
 
-step 2 - search the vector store
-Find the top-N / top-k vectors most similar to the question.
+### 2.3 Four exam steps of RAG
 
-step 3 - Construct the prompt
-context [retrieved company information]
-question "What is our refund policy"
+1. **Embed** the question  
+   `"What is our refund policy?"` → embedding model → `[0.18, 0.75, ...]`
+2. **Search** the vector store  
+   Find top-N / top-k vectors closest to the question.
+3. **Prompt**  
+   Put retrieved company text + the question into the prompt.
+4. **Generate**  
+   Call the LLM so it answers from that context.
 
-step 4 - Call the LLM
-LLM use retrieved context to construct the answer
-memory trick - [E -> S -> P -> G]
-Embed → Search → Prompt → Generate
+Memory: **E → S → P → G** (Embed, Search, Prompt, Generate)
 
 ### 2.4 Metadata filtering
-vector similarity isnt always enough
 
-imagine company store documents for many customer:
-Document A → Tenant A
-Document B → Tenant B
-Document C → Tenant A
+Vector similarity alone is not enough when many tenants share one store.
 
-if tenant A asks a question, we dont want document from tenant B appeared. Therefore we can combine *vector + metadata filter*
+| Document | Tenant |
+| --- | --- |
+| A | Tenant A |
+| B | Tenant B |
+| C | Tenant A |
 
-example: WHERE tenant = "TenantA"
-then perform similarity search
+If Tenant A asks, Tenant B’s docs must not appear. Combine **vector search + metadata filter**, for example `WHERE tenant = "TenantA"`, then rank by similarity.
 
-other metadata filter might include: date, category, user, department, document type. 
+Other filters: date, category, user, department, document type.
 
-## Azure Cosmos DB for NoSQL
+---
 
-### 3.1 What is Cosmos DB
-cosmos DB is a globally distributed NoSAL database design for low-latency applications. It stores JSON-like documents called items.
+## 3. Azure Cosmos DB for NoSQL
 
-the hierarchy is important: Cosmos DB Account -> DB -> container -> Items
+### 3.1 What it is
 
-example:
+A globally distributed NoSQL database for low-latency apps. It stores JSON-like documents called **items**.
+
+Hierarchy (memorize this):
+
+```text
+Account → Database → Container → Items
+```
+
+```json
 {
-    "id": "101",
-    "category": "AI",
-    "title": "Introduction to RAG",
-    "embedding": [0.12, 0.81, 0.33]
+  "id": "101",
+  "category": "AI",
+  "title": "Introduction to RAG",
+  "embedding": [0.12, 0.81, 0.33]
 }
+```
 
-therefore, Cosmos DB can store *normal app data, metadata and embeddings* together
+One item can hold app data, metadata, **and** the embedding together.
 
-### 3.2 Partition Keys
-a partition key determines how cosmos DV distributes data (its like primary keys). Imagine 1 millions documents, Cosmos DH doesnt what all of them concentrated in one locationl A partition keys helps distributed the data and loaded.
+### 3.2 Partition keys
 
-good partition key should generally have:
-High cardinality + even distribution
-good example: customerId, userId, tenantId
-bad example: active, inative
+A partition key decides how Cosmos spreads data. Think of it as how the data is physically grouped, not as a SQL primary key.
 
-### 3.3 Hot Partitions
+A good partition key has **high cardinality** and **even distribution**.
 
-example:
+| Good | Bad |
+| --- | --- |
+| `customerId`, `userId`, `tenantId` | `status = active/inactive` (few values, uneven load) |
+
+**You cannot simply change the partition key after the container is created.** Plan it first.
+
+Exam wording: *Which database configuration should be planned carefully before creating a Cosmos DB container?* → partition key.
+
+### 3.3 Hot partitions
+
+```text
 Partition A → 90% of requests
 Partition B → 5%
 Partition C → 5%
+```
 
-so, partition A becomes a hot partition. That can cause throttling.
-exam materials associates throttling with: HTTP 429
+A becomes a **hot partition**. That can throttle even if the account still has unused RU capacity.
 
-tricky point: even a DB have unused RU capacity, a hot partition can still cause throtting
-remember: bad partition key -> uneven traffic -> hot partition -> 429 throttling
+Chain to remember:
 
-### Important Partition key rule
-memorize: The partition key cannot simply be changed after container creation. 
+```text
+bad partition key → uneven traffic → hot partition → HTTP 429 throttling
+```
 
-exam wording: Which database configuration should be planned carefully before creating a Cosmos DB container?
-think: Partition key
+### 3.4 Request Units (RUs)
 
-## Cosmos DB Request Units (RUs)
-Cosmos DB measure database operation cost using request units (RU)
-example of operations consume RUs: read, write, update, query, vector search
+Cosmos bills work in **RUs**. Reads, writes, updates, queries, and vector search all consume RUs.
 
-## 4.1 Point reads
-important in exam: point read are cheaper than queries
+### 3.5 Point reads
 
-point read knows both: id + partition key
-so Cosmos DB knows exactly where the items is.
+Point reads are cheaper than queries.
 
-conceptually:
-"Give me item 100
-where partition = Customer7"
+A point read needs **id + partition key**, so Cosmos knows exactly where the item is.
 
-much easier than:
-"Search all documents for items matching these conditions."
+```text
+Give me item 100 where partition = Customer7
+```
 
-memorize:
-Lowest-cost Cosmos DB lookup → point read using ID + partition key.
+That is cheaper than scanning for matching conditions.
 
-## 4.2 What increase RU consumption?
+**Lowest-cost Cosmos lookup = point read using id + partition key.**
 
-Larger documents require more processing: larger items -> more RUs
+### 3.6 What increases RU consumption?
 
-Queries: generally cost more than point reads
+- Larger items → more RUs
+- Queries cost more than point reads
+- Cross-partition queries cost more; include the partition key when you can
+- Indexing everything: more index maintenance → higher write RUs
 
-Cross-partition queries: searching multiple partitions requires more work, therefore when possible include *the partition key in the query*.
+### 3.7 Indexing
 
-Excessive indexing:
-More indexing -> More index maintenance -> Higher write RU
+By default Cosmos indexes properties automatically. Convenient, but you do not need every path.
 
-## Cosmos DB indexing
-by default Cosmos DB indexes properties automatically. it make query convinient but indexing everything isnt always necessary. we can exclude unused paths.
+Index `/title`, `/category`. Maybe exclude `/hugeRawContent`.
 
-example
-/document
-/title
-/category
-might need indexing, but perhaps
-/hugeRawContent
-doesnt.
+Exclude unused paths to cut write RUs and storage.
 
-exclude unused path can reduce write RU and storage requirements
+**Composite indexes** help queries that filter/sort on multiple properties.
 
-### 5.1 Composite indexes
-can improve involving multiple properties, particularly multi-propery sorting / query patterns
+Exam rule: index according to query patterns, not everything.
 
-general exam principle:
-Index according to the application's query patterns
+### 3.8 Consistency levels
 
-not:
-Index absolutely everything.
+Strongest → weakest:
+
+1. Strong
+2. Bounded Staleness
+3. Session
+4. Consistent Prefix
+5. Eventual
+
+Acronym (order is what matters): **Strong Bears Sit Calmly Eventually**
+
+**Strong:** after write X, a read must see latest X. Highest guarantee. More latency / availability trade-offs, and Strong / Bounded Staleness can cost about **twice the read RUs** in the relevant configs.
+
+**Session:** default. **Read-your-own-writes** inside a session.
+
+User updates a profile, then immediately reads it, and sees their own update. If the exam says *read-your-own-writes*, pick Session.
+
+### 3.9 Vector search in Cosmos DB
+
+Embeddings live on the JSON item. Similarity uses `VectorDistance()`. Always take **TOP N**.
+
+```sql
+SELECT TOP 5
+    c.id,
+    c.text,
+    VectorDistance(c.embedding, @queryVector) AS score
+FROM c
+ORDER BY VectorDistance(c.embedding, @queryVector)
+```
+
+Exam memory: Cosmos vector search → **`VectorDistance` + TOP N**
+
+**DiskANN** is the ANN index. You do not scan every vector. The index finds nearest neighbors at scale.
+
+```text
+Cosmos DB → Vector Search → DiskANN
+```
+
+### 3.10 Change feed
+
+Listen for inserts/updates instead of polling. Good for event-driven pipelines:
+
+```text
+new document → Cosmos DB → change feed → processor → generate embedding → update AI/search
+```
+
+| Operation | Captured by default? |
+| --- | --- |
+| Create | Yes |
+| Update | Yes |
+| Delete | **No** |
+
+**Change Feed Processor** watches the feed and runs your handlers. Coordination uses a **lease container** (another container that tracks progress so multiple workers do not fight over the same changes).
+
+Delivery is **at-least-once**. The same event can arrive twice. Processing must be **idempotent**: running twice must not double-charge, double-email, or double-write.
+
+```text
+at-least-once → possible duplicates → check event ID → skip if already processed
+```
+
+---
+
+## 4. Azure Database for PostgreSQL Flexible Server
+
+Managed PostgreSQL: normal Postgres plus Azure management.
+
+### 4.1 Compute tiers
+
+| Tier | Use |
+| --- | --- |
+| Burstable | Dev/test or bursty CPU |
+| General Purpose | Balanced workloads |
+| Memory Optimized | Memory-heavy / vector workloads |
+
+HNSW vector indexes want RAM. For large pgvector workloads, pick **Memory Optimized**.
+
+```text
+pgvector → large vector workload → Memory Optimized
+```
+
+### 4.2 Connectivity
+
+- Default port: **5432**
+- SSL/TLS on by default
+- Auth: PostgreSQL password or Microsoft Entra ID
+
+Opening a new DB connection every time is expensive. **Connection pooling** keeps a pool and reuses connections.
+
+### 4.3 Schema and standard indexes
+
+Postgres is still relational. Normal design still matters.
+
+| Index | Typical use |
+| --- | --- |
+| B-tree | Equality, range |
+| GIN | JSONB, full-text |
+| GiST | Geometric data, range types |
+
+**JSONB** stores semi-structured JSON. One database can mix relational columns + JSONB + vector columns.
+
+Over-indexing: indexes speed reads, but every INSERT / UPDATE / DELETE must maintain them. More indexes → faster reads, slower writes, more storage. Index from query patterns.
+
+### 4.4 pgvector
+
+Extension that stores and searches vectors.
+
+1. Allow-list the extension in server parameters
+2. `CREATE EXTENSION vector;`
+
+```sql
+embedding vector(1536)
+```
+
+That column holds a 1,536-dimension vector.
+
+### 4.5 Distance operators (memorize)
+
+| Operator | Meaning |
+| --- | --- |
+| `<->` | Euclidean / L2 |
+| `<=>` | Cosine distance |
+| `<#>` | Negative inner product |
+
+Exam favorite: **`<=>` cosine**.
+
+```sql
+SELECT id, content
+FROM docs
+ORDER BY embedding <=> '[0.1,0.2,...]'
+LIMIT 5;
+```
+
+Returns the 5 docs with the smallest cosine distance to the query vector.
+
+| Doc | Distance | Similarity |
+| --- | --- | --- |
+| A | 0.05 | Closest |
+| B | 0.25 | Mid |
+| C | 0.80 | Farthest |
+
+**Smaller distance → more similar.**
+
+### 4.6 HNSW
+
+**Hierarchical Navigable Small World** = approximate nearest neighbor (ANN) index.
+
+Without it, Postgres may compare the query against huge numbers of vectors. With it, queries are much faster on large sets. Trade-off: more build time and memory for faster search.
+
+### 4.7 PostgreSQL as a RAG store
+
+```text
+documents → embeddings → PostgreSQL pgvector → HNSW
+```
+
+Query time:
+
+```text
+question → embedding → similarity search → top-k chunks → LLM prompt → answer
+```
+
+Advantage: **relational filters + vector similarity in one database**.
+
+---
+
+## 5. Azure Managed Redis
+
+In-memory store built on Redis Enterprise. Extremely low latency. Use it as a cache in front of slower stores, or as a vector/semantic cache.
+
+Do not treat Redis as a relational database. It is key/value plus in-memory structures: strings, hashes, lists, sets, sorted sets.
+
+### 5.1 Cache-aside
+
+```text
+Need data
+    → check Redis
+        HIT  → return
+        MISS → query DB → write cache → return
+```
+
+Example: product 100.
+
+1. Ask Redis for `product:100`
+2. Hit → return now
+3. Miss → query PostgreSQL, put the product in Redis, return it
+
+**Cache-aside = cache first, DB on miss.** Most common exam cache pattern.
+
+### 5.2 Write-through
+
+App writes → update **cache and database together**, so the cache stays fresh on writes.
+
+| Pattern | Idea |
+| --- | --- |
+| Cache-aside | Read cache; on miss go to DB |
+| Write-through | Write cache and DB together |
+
+### 5.3 TTL (time to live)
+
+How long a key lives before it expires.
+
+`TTL = 3600` → 1 hour.
+
+```redis
+SET session:123 "data" EX 3600
+```
+
+Create key, set value, expire after 3600 seconds.
+
+### 5.4 Cache invalidation
+
+Cache is only useful if it is not dangerously stale.
+
+- DB price: RM 50
+- Redis price: RM 40 → old
+
+You still need expiration, invalidation, or refresh.
+
+### 5.5 Redis vector search
+
+**RediSearch** enables vector search on hashes or JSON.
+
+| Index | Search | Method | Dataset |
+| --- | --- | --- | --- |
+| **FLAT** | Exact | Brute force | Small |
+| **HNSW** | Approximate | ANN | Large |
+
+- FLAT → exact, poor at huge scale
+- HNSW → approximate, fast, scales
+
+Distance metrics are the usual ones: L2, inner product (IP), cosine. The math does not change just because Redis holds the vectors.
+
+### 5.6 Semantic caching
+
+Traditional cache needs an **exact key**.
+
+- "What is the capital of Malaysia?"
+- "Which city is Malaysia's capital?"
+
+Same question, different strings → two misses in a normal cache.
+
+Semantic cache:
+
+```text
+question → embedding → Redis vector search
+→ similar cached question? → return cached LLM answer (skip a new LLM call)
+```
+
+LLM calls cost latency, money, and tokens. Similar repeated questions can skip those.
+
+| Cache | Match |
+| --- | --- |
+| Traditional | Exact key |
+| Semantic | Embedding similarity |
+
+---
+
+## 6. Three-service comparison
+
+| Feature | Cosmos DB | PostgreSQL | Managed Redis |
+| --- | --- | --- | --- |
+| Primary role | NoSQL database | Relational database | In-memory store / cache |
+| Data model | JSON documents | Tables / rows + JSONB | Key/value structures |
+| Vector capability | Built-in vector search | pgvector | RediSearch |
+| Main vector index | **DiskANN** | **HNSW** | **FLAT / HNSW** |
+| Query style | Cosmos SQL-like | SQL | Redis commands / search |
+| Performance unit | RU/s | Compute / RAM / IOPS | In-memory latency |
+| Special feature | Global distribution, change feed | Relational + vector in one DB | Caching, semantic caching |
+| Common AI use | RAG / vector DB | RAG / vector DB | Semantic cache / fast retrieval |
+
+---
+
+## 7. Exam cue sheet
+
+| Exam wording | Think |
+| --- | --- |
+| Cheapest Cosmos DB operation | Point read: **id + partition key** |
+| Uneven Cosmos traffic | **Hot partition** |
+| Throttling | **HTTP 429** |
+| Partition key | **Cannot simply change after creation** |
+| Cosmos default consistency | **Session** |
+| Read-your-own-writes | **Session consistency** |
+| Cosmos vector function | **`VectorDistance()`** |
+| Cosmos ANN index | **DiskANN** |
+| React to new/updated Cosmos items | **Change feed** |
+| Change feed misses by default | **Deletes** |
+| Change Feed Processor coordination | **Lease container** |
+| Change Feed Processor delivery | **At least once** |
+| At-least-once processing | **Idempotent handlers** |
+| PostgreSQL port | **5432** |
+| PostgreSQL vector extension | **pgvector** |
+| Enable extension | **`CREATE EXTENSION vector;`** |
+| Vector-heavy PostgreSQL tier | **Memory Optimized** |
+| PostgreSQL cosine | **`<=>`** |
+| PostgreSQL Euclidean | **`<->`** |
+| PostgreSQL negative inner product | **`<#>`** |
+| PostgreSQL ANN index | **HNSW** |
+| Very-low-latency in-memory store | **Azure Managed Redis** |
+| Most common cache pattern | **Cache-aside** |
+| Cache first, DB on miss | **Cache-aside** |
+| Redis automatic expiration | **TTL** |
+| Exact Redis vector search | **FLAT** |
+| Large-scale approximate Redis search | **HNSW** |
+| Cache similar questions | **Semantic caching** |
