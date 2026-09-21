@@ -105,4 +105,6 @@ Notes will land under folders that match the four domains as they get written.
 
 ## Disclaimer
 
-These are personal notes for preparing for the exam. Community contributions are welcome.
+These are personal study notes for Exam AI-200. The written notes are **100% my own**. Diagrams and visual aids in this repo were generated with **[Gemini NotebookLM](https://notebooklm.google.com/)** but fully guided by me.
+
+This is not official Microsoft exam content. Use it as a supplement alongside the [official study guide](https://learn.microsoft.com/en-us/credentials/certifications/resources/study-guides/ai-200). Community contributions are welcome.

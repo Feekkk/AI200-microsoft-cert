@@ -1,5 +1,7 @@
 # AI solutions with Azure data management services
 
+![AI solutions with Azure data management services](../assets/domain-2.png)
+
 How an AI app stores data, stores embeddings, retrieves meaning, and caches results.
 
 | Service | Main purpose | Vector capability |
@@ -485,6 +487,25 @@ LLM calls cost latency, money, and tokens. Similar repeated questions can skip t
 ---
 
 ## 6. Three-service comparison
+
+Quick visual of which index belongs to which database (Domain 2, ~25–30% of the exam):
+
+![AI-200 Exam Prep: Database Indexing Guide comparing Cosmos DB DiskANN, PostgreSQL HNSW, and Redis FLAT/HNSW](../assets/database-index.png)
+
+| Database | Index | Best for |
+| --- | --- | --- |
+| Cosmos DB | **DiskANN** | Large-scale ANN vector search in NoSQL documents |
+| Cosmos DB | **Composite** | Multi-property sorting / complex filters |
+| PostgreSQL | **HNSW** | Production ANN search in relational schemas |
+| Redis | **FLAT** | Exact search on small datasets |
+| Redis | **HNSW** | Large-scale, low-latency semantic search / caching |
+
+Postgres gotcha from the chart: the index ops class must match the operator.
+
+| Operator | Ops class |
+| --- | --- |
+| `<=>` cosine | `vector_cosine_ops` |
+| `<->` Euclidean / L2 | `vector_l2_ops` |
 
 | Feature | Cosmos DB | PostgreSQL | Managed Redis |
 | --- | --- | --- | --- |
