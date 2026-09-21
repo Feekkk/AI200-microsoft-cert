@@ -85,16 +85,32 @@ Source: [exam-focus/exam-tips.md](exam-focus/exam-tips.md) and the [official AI-
 - Distributed tracing with **OpenTelemetry**
 - **KQL** queries over logs and metrics
 
+## Study notes
+
+| File | Domain | Weight |
+| --- | --- | --- |
+| [exam-focus/domains-1.md](exam-focus/domains-1.md) | Develop containerized solutions on Azure | 20–25% |
+| [exam-focus/domins-2.md](exam-focus/domins-2.md) | Develop AI solutions with Azure data services | 25–30% |
+| [exam-focus/exam-tips.md](exam-focus/exam-tips.md) | Exam format and logistics | — |
+
 ## Repo layout
 
 ```
 AI-200/
-├── README.md                 # this file
+├── README.md
+├── assets/                   # diagrams (NotebookLM)
+│   ├── AI-200 header.png
+│   ├── Azure-ACA & KEDA.png
+│   ├── Azure-Kubernetes.png
+│   ├── database-index.png
+│   └── domain-2.png
 └── exam-focus/
-    └── exam-tips.md          # exam format and logistics
+    ├── domains-1.md          # Domain 1 — containers
+    ├── domins-2.md           # Domain 2 — data services
+    └── exam-tips.md
 ```
 
-Notes will land under folders that match the four domains as they get written.
+Domains 3 and 4 notes still to come.
 
 ## Official links
 

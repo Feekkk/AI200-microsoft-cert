@@ -1,139 +1,174 @@
-# Domain 1 — Develop containerized solutions on Azure (20–25%)
+# Develop containerized solutions on Azure (20–25%)
+
+![Develop containerized solutions on Azure](../assets/domain-1.png)
 
 Hosting and orchestrating container images, scaling, and troubleshooting.
 
 Official split:
 
-- **Implement container application hosting** — ACR, ACR Tasks, App Service for Containers
-- **Implement container-orchestrated solutions** — ACA + KEDA, AKS manifests, logs / events / connectivity
+| Skill area | What it covers |
+| --- | --- |
+| **Implement container application hosting** | ACR, ACR Tasks, App Service for Containers |
+| **Implement container-orchestrated solutions** | ACA + KEDA, AKS manifests, logs / events / connectivity |
 
 Pick the host by how much Kubernetes you want:
 
 | Host | You manage | Best for |
 | --- | --- | --- |
-| App Service for Containers | almost nothing | one web app (or simple Compose) |
-| Azure Container Apps | env, revisions, scale rules | microservices, event-driven jobs, scale-to-zero |
-| AKS | cluster + YAML | full Kubernetes control |
+| App Service for Containers | Almost nothing | One web app (or simple Compose) |
+| Azure Container Apps | Env, revisions, scale rules | Microservices, event-driven jobs, scale-to-zero |
+| AKS | Cluster + YAML | Full Kubernetes control |
 
 ACI (Container Instances) is **not** a Domain 1 bullet. Do not pick it when the question is about revisions, KEDA, or manifests.
 
 ---
 
-# Implement container application hosting
-
-## Azure Container Registry (ACR) and ACR Tasks
+## 1. Azure Container Registry (ACR) and ACR Tasks
 
 Private Docker registry for storing, versioning, and deploying images.
 
-### SKU tiers
+### 1.1 SKU tiers
 
-- **Basic** — entry-level, dev/test
-- **Standard** — mid-size production
-- **Premium** — required for geo-replication, private endpoints / Private Link, customer-managed keys, content trust, dedicated data endpoints, zone redundancy, higher throughput
+| Tier | Use |
+| --- | --- |
+| **Basic** | Entry-level, dev/test |
+| **Standard** | Mid-size production |
+| **Premium** | Geo-replication, private endpoints / Private Link, customer-managed keys, content trust, dedicated data endpoints, zone redundancy, higher throughput |
 
-If the scenario says geo-replication or private endpoint, the answer is Premium. Standard cannot do those.
+If the scenario says **geo-replication** or **private endpoint**, the answer is **Premium**. Standard cannot do those.
 
-### Authentication and RBAC
+### 1.2 Authentication and RBAC
 
-- Production pattern: **managed identity + `AcrPull`**. Do not use the registry admin user.
-- `AcrPull` — pull only
-- `AcrPush` — pull and push
-- `Contributor` / `Owner` on the **registry resource** does **not** grant image pull. Image access is data-plane (`AcrPull` / `AcrPush` or a scoped token).
-- Repository-scoped access: **tokens + scope maps** (pull/push per repo), not the admin user.
-- AKS / ACA / App Service pull from ACR with a user-assigned or system-assigned identity that has `AcrPull`. AKS can also use the kubelet identity or an image-pull secret; identity is the exam answer.
+Production pattern: **managed identity + `AcrPull`**. Do not use the registry admin user.
 
-### Image tagging
+| Role / method | What it allows |
+| --- | --- |
+| `AcrPull` | Pull only |
+| `AcrPush` | Pull and push |
+| `Contributor` / `Owner` on the registry resource | Control plane only — **does not** grant image pull |
+| Tokens + scope maps | Repo-scoped pull/push (not admin user) |
 
-Avoid `:latest` in production. It is mutable, so rollbacks and slot swaps become guesswork. Use semantic tags (`1.4.2`) or unique tags (git SHA). Pin the digest (`@sha256:...`) when you need an immutable pull.
+Image access is **data-plane** (`AcrPull` / `AcrPush` or a scoped token).
 
-### ACR Tasks
+AKS / ACA / App Service pull from ACR with a user-assigned or system-assigned identity that has `AcrPull`. AKS can also use the kubelet identity or an image-pull secret; **identity is the exam answer**.
+
+### 1.3 Image tagging
+
+Avoid `:latest` in production. It is mutable, so rollbacks and slot swaps become guesswork.
+
+Prefer:
+
+- Semantic tags (`1.4.2`)
+- Unique tags (git SHA)
+- Digest pin (`@sha256:...`) when you need an immutable pull
+
+### 1.4 ACR Tasks
 
 Build in Azure so you do not need Docker on a laptop or in CI agents.
 
-- **Quick tasks** — on-demand build and push: `az acr build`
-- **Automated triggers** — git commit / PR, cron schedule, or **base-image update** (rebuild when `python:3.12` gets a patch)
-- **Multi-step tasks** — YAML that chains build → test → push
+| Task type | What it does |
+| --- | --- |
+| **Quick tasks** | On-demand build and push: `az acr build` |
+| **Automated triggers** | Git commit / PR, cron, or **base-image update** (rebuild when `python:3.12` gets a patch) |
+| **Multi-step tasks** | YAML that chains build → test → push |
 
-`az acr build` uploads context to ACR and runs the build there. `docker build` + `docker push` is the local path; the exam prefers ACR Tasks when the goal is “build in Azure” or “rebuild when the base image changes.”
+```text
+az acr build  →  uploads context to ACR  →  build runs in Azure
+docker build + docker push  →  local path
+```
+
+Exam prefers ACR Tasks when the goal is “build in Azure” or “rebuild when the base image changes.”
 
 ---
 
-## Azure App Service for Containers
+## 2. Azure App Service for Containers
 
 Fully managed PaaS. Best for a **single web container**, or a simple multi-container **Compose** setup, with almost no cluster work.
 
-### Config and secrets
+### 2.1 Config and secrets
 
 - **App settings** become environment variables inside the container.
-- **Key Vault references** + managed identity is the preferred way to inject secrets. Do not bake secrets into the image or put them in plain app settings if Key Vault is an option.
+- **Key Vault references + managed identity** is the preferred way to inject secrets. Do not bake secrets into the image or put them in plain app settings if Key Vault is an option.
 - Container listen port: set `WEBSITES_PORT` (or `PORT`) to the port the process actually binds. Wrong port = app never becomes healthy.
 
-### Deployment slots
+### 2.2 Deployment slots
 
 - Slots give a staging environment and a swap for near-zero downtime.
-- Settings that must **not** swap (DB connection, slot hostname, slot-specific secrets): mark them **slot-specific** / sticky. That is the usual exam answer for “connection string changed after swap.”
-- Swap is a traffic cutover of the already-running slot, not a new image build.
+- Settings that must **not** swap (DB connection, slot hostname, slot-specific secrets): mark them **slot-specific** / sticky.
+- That is the usual exam answer for “connection string changed after swap.”
+- Swap is a traffic cutover of the already-running slot, **not** a new image build.
 
 App Service is the wrong pick when you need scale-to-zero, KEDA scalers, or many microservices with per-service revisions.
 
 ---
 
-# Implement container-orchestrated solutions
-
-## Azure Container Apps (ACA) and KEDA
+## 3. Azure Container Apps (ACA) and KEDA
 
 Fully managed serverless containers on Kubernetes, KEDA, Envoy, and optional Dapr. You do not manage nodes or YAML for Deployments.
 
-<img src="../assets/Azure-ACA%20&%20KEDA.png" alt="Azure Container Apps (ACA) and KEDA" style="max-width: 100%; height: auto;" />
+![Azure Container Apps (ACA) and KEDA](../assets/Azure-ACA%20&%20KEDA.png)
 
-### Environment
+### 3.1 Environment
 
 Apps live in a **Container Apps environment** (shared networking, logging, Dapr).
 
-- **Consumption** — pay per use, scale to zero
-- **Workload profiles** — dedicated compute for predictable CPU/memory, still scale rules on top
+| Plan | Idea |
+| --- | --- |
+| **Consumption** | Pay per use, scale to zero |
+| **Workload profiles** | Dedicated compute for predictable CPU/memory, still with scale rules |
 
 One environment, many apps. Apps in the same environment can talk over the internal mesh (`http://<app-name>`).
 
-### Apps vs jobs
+### 3.2 Apps vs jobs
 
-- **App** — long-running (HTTP API, worker that stays up, min replicas ≥ 0)
-- **Job** — run to completion: manual, scheduled (cron), or event-driven. Use a job for “process this queue message then exit,” not a always-on app with min replicas = 1
+| Type | Behavior | When to use |
+| --- | --- | --- |
+| **App** | Long-running (HTTP API, worker that stays up, min replicas ≥ 0) | Always-on HTTP / workers |
+| **Job** | Run to completion: manual, scheduled (cron), or event-driven | “Process this queue message then exit” |
 
-### Revisions
+Do not use an always-on app with min replicas = 1 for a one-shot batch.
+
+### 3.3 Revisions
 
 A revision is an immutable snapshot of the container image + env + scale config.
 
-- New image or config change → **new revision**
-- **Single revision mode** — only one revision gets traffic (simple apps)
-- **Multiple revision mode** — split traffic (10% / 90%) for canary / blue-green
-- You do not “edit” a live revision. You create another one and shift traffic.
+```text
+new image or config change → new revision
+```
 
-If the question is about canary or splitting traffic between two container versions **without AKS**, the answer is ACA revisions + traffic weights.
+| Mode | Traffic |
+| --- | --- |
+| **Single revision** | Only one revision gets traffic (simple apps) |
+| **Multiple revision** | Split traffic (10% / 90%) for canary / blue-green |
 
-### Ingress
+You do not “edit” a live revision. You create another one and shift traffic.
 
-- **External** — public HTTPS
-- **Internal** — only inside the environment / VNet
+If the question is about canary or splitting traffic between two container versions **without AKS**, the answer is **ACA revisions + traffic weights**.
+
+### 3.4 Ingress
+
+| Ingress | Who can reach it |
+| --- | --- |
+| **External** | Public HTTPS |
+| **Internal** | Only inside the environment / VNet |
+
 - Ingress is Envoy in front of replicas. Target port must match the container.
-- Ingress off = no HTTP URL; other apps can still call it only if you set up that path, so most APIs want ingress on.
+- Ingress off = no HTTP URL. Most APIs want ingress on.
 
-### Secrets and identity
+### 3.5 Secrets and identity
 
 - Secrets at app scope, mapped as env vars or volume mounts
 - Managed identity for ACR pull, Key Vault, Service Bus, Storage
 - Dapr is optional sidecar (pub/sub, state, bindings). Do not turn it on unless the scenario needs it.
 
-### KEDA scaling
+### 3.6 KEDA scaling
 
 ACA scale rules are KEDA under the hood.
 
 - **min replicas = 0** → scale to zero (HTTP or event) and pay nothing when idle
-- **max replicas** — cap
+- **max replicas** → cap
 - HTTP / TCP concurrent-request rules for APIs
 - Event scalers: Service Bus queue/topic length, Event Hubs, Storage queues, Redis lists, Cron, CPU/memory
-
-Typical exam mapping:
 
 | Signal | Scale rule |
 | --- | --- |
@@ -144,25 +179,27 @@ Typical exam mapping:
 
 KEDA scales **replicas of the app**, not VM nodes. Node count is an AKS / cluster-autoscaler concern.
 
-Polling interval and cooldown matter: a queue scaler that is too slow looks like “messages stuck”; check scale rule auth (managed identity / connection) before blaming the image.
+Polling interval and cooldown matter: a queue scaler that is too slow looks like “messages stuck.” Check scale rule auth (managed identity / connection) before blaming the image.
 
 ---
 
-## Azure Kubernetes Service (AKS)
+## 4. Azure Kubernetes Service (AKS)
 
 Managed Kubernetes. You own the YAML: Deployments, Services, Ingress, probes, HPA.
 
-<img src="../assets/Azure-Kubernetes.png" alt="Azure Kubernetes" style="max-width: 100%; height: auto;" />
+![Azure Kubernetes](../assets/Azure-Kubernetes.png)
 
-### Architecture
+### 4.1 Architecture
 
-- **Control plane** — API server, scheduler, etcd. Azure manages it. **Free** has no SLA. Production needs **Standard** or **Premium**.
-- **Node pools**
-  - System pool — CoreDNS, metrics, CSI, kube-system. Taint so app pods stay off it.
-  - User pool — application workloads
-- Separate node pools for GPU, spot, or Windows. Do not mix system add-ons onto the only user pool if the question asks for isolation.
+| Piece | Who manages it | Notes |
+| --- | --- | --- |
+| **Control plane** | Azure (API server, scheduler, etcd) | **Free** has no SLA. Production needs **Standard** or **Premium**. |
+| **System node pool** | You (nodes), Azure add-ons | CoreDNS, metrics, CSI, kube-system. Taint so app pods stay off it. |
+| **User node pool** | You | Application workloads |
 
-### Deploy with manifests
+Separate node pools for GPU, spot, or Windows. Do not mix system add-ons onto the only user pool if the question asks for isolation.
+
+### 4.2 Deploy with manifests
 
 Exam skill: deploy and manage with **manifest files**, not the portal click-ops story.
 
@@ -175,94 +212,132 @@ Typical set:
 - `Secret` / `ConfigMap` (or CSI Secret Store for Key Vault)
 - `HorizontalPodAutoscaler`
 
-Apply: `kubectl apply -f`. Update image by changing the tag in the Deployment and applying again, or `kubectl set image`.
+```text
+kubectl apply -f
+```
 
-Probes:
+Update image by changing the tag in the Deployment and applying again, or `kubectl set image`.
 
-- **liveness** — restart the container if it is dead
-- **readiness** — take it out of the Service until it can take traffic
-- **startup** — slow-starting apps (common for AI runtimes)
+| Probe | Job |
+| --- | --- |
+| **liveness** | Restart the container if it is dead |
+| **readiness** | Take it out of the Service until it can take traffic |
+| **startup** | Slow-starting apps (common for AI runtimes) |
 
 Missing readiness probe is a classic “traffic hits pods that are still loading the model” failure.
 
-### Networking models
+### 4.3 Networking models
 
-- **Azure CNI** — each pod gets a VNet IP. Other VNet resources can route to pods. Uses more IPs.
-- **Azure CNI Overlay** — pods get overlay IPs; nodes sit on the VNet. Fewer VNet IPs, still Azure CNI features. Common modern default.
-- **Kubenet** — overlay + NAT. Smaller IP burn, less direct pod reachability, older pattern.
+| Model | Pod addressing | When |
+| --- | --- | --- |
+| **Azure CNI** | Each pod gets a VNet IP | Other VNet resources can route to pods. Uses more IPs. |
+| **Azure CNI Overlay** | Overlay IPs; nodes on the VNet | Fewer VNet IPs, still Azure CNI features. Common modern default. |
+| **Kubenet** | Overlay + NAT | Smaller IP burn, less direct pod reachability, older pattern |
 
-If pods must be directly reachable from a VNet (private DB firewall on pod IPs, NVA inspection), pick Azure CNI, not kubenet.
+If pods must be directly reachable from a VNet (private DB firewall on pod IPs, NVA inspection), pick **Azure CNI**, not kubenet.
 
-### Autoscaling (do not mix these up)
+### 4.4 Autoscaling (do not mix these up)
 
 | Mechanism | What it scales | When |
 | --- | --- | --- |
-| **HPA** | pod replicas in a Deployment | CPU, memory, or custom metrics |
-| **Cluster autoscaler** | **nodes** in a node pool | pods are `Pending` / unschedulable |
-| **KEDA** (if installed) | replicas from events | queue length, etc. ACA has this built in; AKS you add it |
-| **VPA** | CPU/memory **requests** on pods | not a substitute for HPA |
+| **HPA** | Pod replicas in a Deployment | CPU, memory, or custom metrics |
+| **Cluster autoscaler** | **Nodes** in a node pool | Pods are `Pending` / unschedulable |
+| **KEDA** (if installed) | Replicas from events | Queue length, etc. ACA has this built in; AKS you add it |
+| **VPA** | CPU/memory **requests** on pods | Not a substitute for HPA |
 
-Pods `Pending` + `Insufficient cpu` → cluster autoscaler / bigger nodes, not HPA. HPA already wants more replicas; there is nowhere to put them.
+```text
+Pods Pending + Insufficient cpu
+  → cluster autoscaler / bigger nodes
+  → NOT HPA
+```
 
-### Identity and ACR
+HPA already wants more replicas; there is nowhere to put them.
 
-Attach ACR with `az aks update --attach-acr` (AcrPull on the kubelet / kubelet identity). ImagePullBackOff + 401 from ACR is almost always missing `AcrPull` or wrong identity.
+### 4.5 Identity and ACR
+
+Attach ACR with:
+
+```bash
+az aks update --attach-acr
+```
+
+That grants `AcrPull` on the kubelet / kubelet identity.
+
+`ImagePullBackOff` + 401 from ACR is almost always missing `AcrPull` or wrong identity.
 
 ---
 
-# Monitor and troubleshoot (AKS and Container Apps)
+## 5. Monitor and troubleshoot (AKS and Container Apps)
 
 The study guide calls this out on its own: inspect **logs**, **events**, and **end-to-end connectivity**.
 
-## Container Apps
+### 5.1 Container Apps
 
-- `az containerapp logs show` / console log stream — stdout/stderr of a replica
-- System logs — revision activation, scale, probe failures
-- Environment → Log Analytics (or storage) for queries
-- Revision status: `Running` vs `Failed` vs `Stopped`; click the revision for replica count
-- Scale: replica count stuck at 0 with HTTP 503 → ingress on, min replicas, or a failing startup probe / image pull
-- Image pull errors → identity + `AcrPull`, tag exists in the registry
+| Tool / place | What you see |
+| --- | --- |
+| `az containerapp logs show` / console log stream | stdout/stderr of a replica |
+| System logs | Revision activation, scale, probe failures |
+| Environment → Log Analytics | Queries over history |
+| Revision status | `Running` vs `Failed` vs `Stopped`; replica count |
 
-Connectivity:
+Common ACA symptoms:
 
-- External ingress 404 / 502 → wrong target port, app not listening on `0.0.0.0`, revision not getting traffic
-- App A cannot reach app B → B ingress internal, name is the ACA app name, same environment
-- VNet-injected environment cannot reach a private PaaS → DNS (Azure Private DNS) and NSGs, not “restart the container”
+| Symptom | Likely cause |
+| --- | --- |
+| Replica count stuck at 0 + HTTP 503 | Ingress off, min replicas, failing startup probe, or image pull |
+| Image pull errors | Identity + `AcrPull`, tag missing in registry |
+| External ingress 404 / 502 | Wrong target port, app not on `0.0.0.0`, revision not getting traffic |
+| App A cannot reach app B | B ingress internal, wrong app name, different environment |
+| VNet-injected env cannot reach private PaaS | Azure Private DNS + NSGs (not “restart the container”) |
 
-## AKS
+### 5.2 AKS
 
 Order that matches how questions are written:
 
-1. **Events** — `kubectl describe pod` / `kubectl get events`. ImagePullBackOff, CrashLoopBackOff, FailedScheduling, FailedMount show up here first.
-2. **Logs** — `kubectl logs` (and `-p` for the previous crash). App exceptions live here, not in events.
-3. **Connectivity** — Service endpoints, NSG, UDR, CoreDNS, NetworkPolicy, NSG on the subnet, private endpoint DNS.
-
-Common mappings:
+1. **Events** — `kubectl describe pod` / `kubectl get events`  
+   ImagePullBackOff, CrashLoopBackOff, FailedScheduling, FailedMount show up here first.
+2. **Logs** — `kubectl logs` (and `-p` for the previous crash)  
+   App exceptions live here, not in events.
+3. **Connectivity** — Service endpoints, NSG, UDR, CoreDNS, NetworkPolicy, private endpoint DNS
 
 | Symptom | Look at |
 | --- | --- |
 | `ImagePullBackOff` | ACR auth, tag, `imagePullSecrets` / AcrPull |
-| `CrashLoopBackOff` | logs, command/args, required env, port |
-| `Pending` | resources, node selectors/taints, cluster autoscaler |
-| 503 from LoadBalancer | readiness probe, endpoints empty (`kubectl get endpoints`) |
+| `CrashLoopBackOff` | Logs, command/args, required env, port |
+| `Pending` | Resources, node selectors/taints, cluster autoscaler |
+| 503 from LoadBalancer | Readiness probe, empty endpoints (`kubectl get endpoints`) |
 | DNS fail inside pod | CoreDNS, VNet DNS, private zone links |
 | Intermittent timeouts to Cosmos/Postgres | NSG, firewall IP of the **node** (kubenet/NAT) vs **pod** (CNI), SNAT ports |
 
-`kubectl get events` without looking at logs is wrong for an app exception. Logs without events is wrong for a scheduling/pull failure.
+```text
+events first  →  pull / schedule failures
+logs next     →  app crashes / exceptions
+DNS / NSG     →  cannot connect
+```
 
 ---
 
-# Exam traps (Domain 1)
+## 6. Exam cue sheet (Domain 1)
 
-- **Contributor on ACR ≠ pull images.** Need `AcrPull`.
-- **Admin user on ACR** is never the production answer.
-- **`:latest`** is the wrong tag strategy in production.
-- **Premium ACR** for geo-replication and private endpoints.
-- **Slot-specific settings** stop connection strings from swapping.
-- **ACA revisions + traffic split**, not AKS, when they want canary without cluster management.
-- **ACA job** for run-to-completion; **app** for HTTP that stays up.
-- **KEDA / ACA scale rules** scale replicas. **Cluster autoscaler** scales nodes.
-- **HPA** vs **cluster autoscaler**: replica count vs node count.
-- **Free AKS** has no control-plane SLA.
-- **System vs user node pools** for isolation.
-- Troubleshoot **events first** for pull/schedule, **logs** for crashes, **DNS/NSG** for “cannot connect.”
+| Exam wording | Think |
+| --- | --- |
+| Contributor on ACR | **Does not pull images** — need `AcrPull` |
+| Admin user on ACR | Never the production answer |
+| `:latest` in production | Wrong tag strategy |
+| Geo-replication / private endpoint for ACR | **Premium** |
+| Connection string changed after slot swap | **Slot-specific / sticky settings** |
+| Canary without managing a cluster | **ACA revisions + traffic split** |
+| Run-to-completion batch | **ACA job** |
+| HTTP that stays up | **ACA app** |
+| Scale from queue depth on ACA | **KEDA scale rule** (replicas) |
+| Nodes need to grow | **Cluster autoscaler** |
+| More pods from CPU | **HPA** |
+| Free AKS control plane | **No SLA** |
+| Isolate system add-ons from apps | **System vs user node pools** |
+| Pull/schedule failure | **Events first** |
+| App exception / crash | **Logs** |
+| Cannot connect to PaaS | **DNS / NSG** |
+| Build image in Azure / rebuild on base update | **ACR Tasks** (`az acr build`) |
+| Single web container, almost no ops | **App Service for Containers** |
+| Scale to zero + microservices | **Azure Container Apps** |
+| Full Kubernetes control + YAML | **AKS** |
