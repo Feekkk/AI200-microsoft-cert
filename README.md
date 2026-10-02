@@ -90,7 +90,7 @@ Source: [exam-focus/exam-tips.md](exam-focus/exam-tips.md) and the [official AI-
 | File | Domain | Weight |
 | --- | --- | --- |
 | [exam-focus/domains-1.md](exam-focus/domains-1.md) | Develop containerized solutions on Azure | 20–25% |
-| [exam-focus/domins-2.md](exam-focus/domins-2.md) | Develop AI solutions with Azure data services | 25–30% |
+| [exam-focus/domains-2.md](exam-focus/domains-2.md) | Develop AI solutions with Azure data services | 25–30% |
 | [exam-focus/exam-tips.md](exam-focus/exam-tips.md) | Exam format and logistics | — |
 
 ## Repo layout
@@ -106,7 +106,7 @@ AI-200/
 │   └── domain-2.png
 └── exam-focus/
     ├── domains-1.md          # Domain 1 — containers
-    ├── domins-2.md           # Domain 2 — data services
+    ├── domains-2.md          # Domain 2 — data services
     └── exam-tips.md
 ```
 
